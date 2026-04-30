@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --color-airtel-red: #E40000;
+  --color-airtel-dark: #141414;
+  --color-airtel-gray: #f5f5f5;
+  --color-airtel-border: #e0e0e0;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f8fafc;
+}
+
+/* Custom Table Styles */
+@layer components {
+  .custom-table {
+    @apply w-full text-left border-collapse bg-white rounded-lg overflow-hidden shadow-sm;
+  }
+  .custom-table th {
+    @apply bg-airtel-red text-white py-3 px-4 font-semibold text-sm tracking-wider uppercase border-b-2 border-airtel-red;
+  }
+  .custom-table td {
+    @apply py-3 px-4 text-sm text-gray-700 border-b border-gray-100 transition-colors;
+  }
+  .custom-table tbody tr:hover td {
+    @apply bg-red-50;
+  }
+  .custom-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+}
