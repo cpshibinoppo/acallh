@@ -1,20 +1,137 @@
-import { useState, useRef } from 'react';
-import { Upload, FileType, CheckCircle2, AlertCircle } from 'lucide-react';
-import { parsePdf, formatTime, formatDuration } from './utils/pdfParser';
+import { useState, useRef, useEffect } from "react";
+import {
+  Upload,
+  FileType,
+  CheckCircle2,
+  AlertCircle,
+  Edit2,
+} from "lucide-react";
+import { parsePdf, formatTime, formatDuration } from "./utils/pdfParser";
+
+const generateMockName = (number) => {
+  const names = [
+    "John Doe",
+    "Jane Smith",
+    "Mom",
+    "Dad",
+    "Work",
+    "Home",
+    "Spam",
+    "Delivery",
+    "Alice",
+    "Bob",
+    "Charlie",
+    "Pizza Shop",
+  ];
+  // Deterministic mock selection based on last digit
+  const lastDigit = parseInt(number.slice(-1) || "0", 10);
+  return names[lastDigit % names.length];
+};
+
+const EditableCell = ({ value, onSave }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentValue, setCurrentValue] = useState(value);
+
+  useEffect(() => {
+    setCurrentValue(value);
+  }, [value]);
+
+  const handleBlur = () => {
+    setIsEditing(false);
+    if (currentValue !== value) {
+      onSave(currentValue);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.target.blur();
+    } else if (e.key === "Escape") {
+      setCurrentValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        className="w-full px-2 py-1 text-sm border-2 border-airtel-red rounded outline-none shadow-sm font-medium"
+        value={currentValue}
+        onChange={(e) => setCurrentValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="cursor-pointer hover:bg-slate-100 px-2 py-1 -mx-2 rounded transition-colors text-slate-700 min-h-[28px] flex items-center group"
+      onClick={() => setIsEditing(true)}
+      title="Click to edit name"
+    >
+      <span className="font-semibold">
+        {value || (
+          <span className="text-slate-400 italic font-normal">Unknown</span>
+        )}
+      </span>
+      <Edit2
+        size={12}
+        className="ml-2 text-slate-400 opacity-0 group-hover:opacity-100"
+      />
+    </div>
+  );
+};
 
 function App() {
   const [file, setFile] = useState(null);
   const [data, setData] = useState(null);
+  const [contacts, setContacts] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Auto-populate names for new numbers
+  useEffect(() => {
+    if (!data || !data.voice) return;
+
+    const uniqueNumbers = [...new Set(data.voice.map((row) => row.number))];
+
+    // Find numbers we don't have in contacts yet
+    const newNumbers = uniqueNumbers.filter((num) => !(num in contacts));
+
+    if (newNumbers.length > 0) {
+      // Simulate API call to fetch names
+      const fetchNames = async () => {
+        const newContacts = {};
+
+        // Simulating network delay
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        newNumbers.forEach((num) => {
+          // Here is where you would call a real API:
+          // const response = await fetch(`https://api.example.com/lookup?number=${num}`);
+          // const result = await response.json();
+          // newContacts[num] = result.name;
+
+          newContacts[num] = generateMockName(num);
+        });
+
+        setContacts((prev) => ({ ...prev, ...newContacts }));
+      };
+
+      fetchNames();
+    }
+  }, [data, contacts]);
 
   const handleFileChange = async (e) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    if (selectedFile.type !== 'application/pdf') {
-      setError('Please upload a valid PDF file.');
+    if (selectedFile.type !== "application/pdf") {
+      setError("Please upload a valid PDF file.");
       return;
     }
 
@@ -26,11 +143,13 @@ function App() {
       const parsedData = await parsePdf(selectedFile);
       setData(parsedData);
       if (parsedData.recharge.length === 0 && parsedData.voice.length === 0) {
-        setError('No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.');
+        setError(
+          "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
+        );
       }
     } catch (err) {
       console.error(err);
-      setError('Failed to parse the PDF. ' + err.message);
+      setError("Failed to parse the PDF. " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +170,6 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-6 md:p-12">
       <div className="max-w-5xl mx-auto space-y-8">
-        
         {/* Header */}
         <header className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-3 bg-airtel-red text-white rounded-2xl shadow-lg shadow-red-500/30 mb-4">
@@ -61,28 +179,32 @@ function App() {
             Airtel Bill Parser
           </h1>
           <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-            Upload your Airtel itemized statement PDF to automatically format times to 12h (AM/PM) and durations to readable hours, minutes, and seconds.
+            Upload your Airtel itemized statement PDF to automatically format
+            times to 12h (AM/PM) and durations to readable hours, minutes, and
+            seconds.
           </p>
         </header>
 
         {/* Uploader */}
         {!data && (
-          <div 
+          <div
             className={`border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-200 ease-in-out cursor-pointer ${
-              isLoading ? 'bg-slate-100 border-slate-300' : 'bg-white border-airtel-red/40 hover:border-airtel-red hover:bg-red-50/50 hover:shadow-xl hover:shadow-red-500/5'
+              isLoading
+                ? "bg-slate-100 border-slate-300"
+                : "bg-white border-airtel-red/40 hover:border-airtel-red hover:bg-red-50/50 hover:shadow-xl hover:shadow-red-500/5"
             }`}
             onClick={() => !isLoading && fileInputRef.current?.click()}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept=".pdf" 
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept=".pdf"
               onChange={handleFileChange}
             />
-            
+
             <div className="flex flex-col items-center justify-center space-y-4">
               {isLoading ? (
                 <div className="w-16 h-16 border-4 border-slate-200 border-t-airtel-red rounded-full animate-spin"></div>
@@ -91,13 +213,17 @@ function App() {
                   <Upload size={32} />
                 </div>
               )}
-              
+
               <div className="space-y-1">
                 <p className="text-xl font-semibold">
-                  {isLoading ? 'Parsing PDF Document...' : 'Click to upload or drag and drop'}
+                  {isLoading
+                    ? "Parsing PDF Document..."
+                    : "Click to upload or drag and drop"}
                 </p>
                 <p className="text-slate-500 text-sm">
-                  {isLoading ? 'Extracting itemized records and formatting data' : 'PDF (max. 10MB)'}
+                  {isLoading
+                    ? "Extracting itemized records and formatting data"
+                    : "PDF (max. 10MB)"}
                 </p>
               </div>
             </div>
@@ -121,9 +247,11 @@ function App() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-green-600 bg-green-50 px-4 py-2 rounded-full border border-green-200">
                 <CheckCircle2 size={20} />
-                <span className="font-medium text-sm">Successfully parsed {file?.name}</span>
+                <span className="font-medium text-sm">
+                  Successfully parsed {file?.name}
+                </span>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setData(null);
                   setFile(null);
@@ -138,7 +266,9 @@ function App() {
             {data.recharge.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-800">Recharge Statement</h2>
+                  <h2 className="text-2xl font-bold text-slate-800">
+                    Recharge Statement
+                  </h2>
                   <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                     {data.recharge.length} records
                   </span>
@@ -159,7 +289,9 @@ function App() {
                         <tr key={i}>
                           <td>{row.sNo}</td>
                           <td>{row.date}</td>
-                          <td className="font-medium text-airtel-red">{formatTime(row.time)}</td>
+                          <td className="font-medium text-airtel-red">
+                            {formatTime(row.time)}
+                          </td>
                           <td>{row.amountRs}</td>
                           <td>{row.channel}</td>
                         </tr>
@@ -174,7 +306,9 @@ function App() {
             {data.voice.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-800">Voice Statement</h2>
+                  <h2 className="text-2xl font-bold text-slate-800">
+                    Voice Statement
+                  </h2>
                   <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                     {data.voice.length} records
                   </span>
@@ -186,9 +320,10 @@ function App() {
                         <th>S.No.</th>
                         <th>Date</th>
                         <th>Time</th>
+                        <th>Name</th>
                         <th>Number</th>
                         <th>Duration</th>
-                        <th>Amount(Rs)</th>
+                        {/* <th>Amount(Rs)</th> */}
                       </tr>
                     </thead>
                     <tbody>
@@ -196,10 +331,27 @@ function App() {
                         <tr key={i}>
                           <td>{row.sNo}</td>
                           <td>{row.date}</td>
-                          <td className="font-medium text-airtel-red">{formatTime(row.time)}</td>
-                          <td className="font-mono text-slate-600">{row.number}</td>
-                          <td className="font-medium text-blue-600 bg-blue-50/50">{formatDuration(row.durationSec)}</td>
-                          <td>{row.amountRs}</td>
+                          <td className="font-medium text-airtel-red">
+                            {formatTime(row.time)}
+                          </td>
+                          <td className="w-48">
+                            <EditableCell
+                              value={contacts[row.number] || ""}
+                              onSave={(newName) => {
+                                setContacts((prev) => ({
+                                  ...prev,
+                                  [row.number]: newName,
+                                }));
+                              }}
+                            />
+                          </td>
+                          <td className="font-mono text-slate-600">
+                            {row.number}
+                          </td>
+                          <td className="font-medium text-blue-600 bg-blue-50/50">
+                            {formatDuration(row.durationSec)}
+                          </td>
+                          {/* <td>{row.amountRs}</td> */}
                         </tr>
                       ))}
                     </tbody>
