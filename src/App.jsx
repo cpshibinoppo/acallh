@@ -1,32 +1,16 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Upload,
   FileType,
   CheckCircle2,
   AlertCircle,
   Edit2,
+  BarChart3,
+  List,
 } from "lucide-react";
 import { parsePdf, formatTime, formatDuration } from "./utils/pdfParser";
 
-const generateMockName = (number) => {
-  const names = [
-    "John Doe",
-    "Jane Smith",
-    "Mom",
-    "Dad",
-    "Work",
-    "Home",
-    "Spam",
-    "Delivery",
-    "Alice",
-    "Bob",
-    "Charlie",
-    "Pizza Shop",
-  ];
-  // Deterministic mock selection based on last digit
-  const lastDigit = parseInt(number.slice(-1) || "0", 10);
-  return names[lastDigit % names.length];
-};
+
 
 const EditableCell = ({ value, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -91,7 +75,28 @@ function App() {
   const [contacts, setContacts] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [currentView, setCurrentView] = useState("statements");
   const fileInputRef = useRef(null);
+
+  const reportData = useMemo(() => {
+    if (!data?.voice) return [];
+    const aggregation = {};
+    data.voice.forEach((row) => {
+      if (!aggregation[row.number]) {
+        aggregation[row.number] = {
+          number: row.number,
+          count: 0,
+          totalDurationSec: 0,
+        };
+      }
+      aggregation[row.number].count += 1;
+      aggregation[row.number].totalDurationSec += parseInt(row.durationSec || 0, 10);
+    });
+
+    return Object.values(aggregation).sort(
+      (a, b) => b.totalDurationSec - a.totalDurationSec
+    );
+  }, [data]);
 
   // Auto-populate names for new numbers
   useEffect(() => {
@@ -103,28 +108,45 @@ function App() {
     const newNumbers = uniqueNumbers.filter((num) => !(num in contacts));
 
     if (newNumbers.length > 0) {
-      // Simulate API call to fetch names
       const fetchNames = async () => {
-        const newContacts = {};
-
-        // Simulating network delay
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
-        newNumbers.forEach((num) => {
-          // Here is where you would call a real API:
-          // const response = await fetch(`https://api.example.com/lookup?number=${num}`);
-          // const result = await response.json();
-          // newContacts[num] = result.name;
-
-          newContacts[num] = generateMockName(num);
-        });
-
-        setContacts((prev) => ({ ...prev, ...newContacts }));
+        try {
+          const response = await fetch('/api/contacts/lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ numbers: newNumbers })
+          });
+          const result = await response.json();
+          
+          if (result.contacts) {
+            setContacts((prev) => ({ ...prev, ...result.contacts }));
+          }
+        } catch (error) {
+          console.error("Failed to fetch names:", error);
+        }
       };
 
       fetchNames();
     }
   }, [data, contacts]);
+
+  const handleContactSave = async (number, newName) => {
+    // Optimistic UI update
+    setContacts((prev) => ({
+      ...prev,
+      [number]: newName,
+    }));
+    
+    // Save to database
+    try {
+      await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number, name: newName })
+      });
+    } catch (error) {
+      console.error("Failed to save contact name:", error);
+    }
+  };
 
   const handleFileChange = async (e) => {
     const selectedFile = e.target.files?.[0];
@@ -244,26 +266,57 @@ function App() {
         {/* Results */}
         {data && !isLoading && (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3 text-green-600 bg-green-50 px-4 py-2 rounded-full border border-green-200">
                 <CheckCircle2 size={20} />
                 <span className="font-medium text-sm">
                   Successfully parsed {file?.name}
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  setData(null);
-                  setFile(null);
-                }}
-                className="text-sm font-medium text-airtel-red hover:text-red-700 hover:underline transition-colors"
-              >
-                Upload another file
-              </button>
+              
+              <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button
+                    onClick={() => setCurrentView("statements")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      currentView === "statements"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <List size={16} />
+                    Statements
+                  </button>
+                  <button
+                    onClick={() => setCurrentView("report")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      currentView === "report"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <BarChart3 size={16} />
+                    Report
+                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    setData(null);
+                    setFile(null);
+                    setCurrentView("statements");
+                  }}
+                  className="text-sm font-medium text-airtel-red hover:text-red-700 hover:underline transition-colors whitespace-nowrap"
+                >
+                  Upload new
+                </button>
+              </div>
             </div>
 
-            {/* Recharge Statement */}
-            {data.recharge.length > 0 && (
+            {/* Statements View */}
+            {currentView === "statements" && (
+              <>
+                {/* Recharge Statement */}
+                {data.recharge.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-slate-800">
@@ -337,12 +390,7 @@ function App() {
                           <td className="w-48">
                             <EditableCell
                               value={contacts[row.number] || ""}
-                              onSave={(newName) => {
-                                setContacts((prev) => ({
-                                  ...prev,
-                                  [row.number]: newName,
-                                }));
-                              }}
+                              onSave={(newName) => handleContactSave(row.number, newName)}
                             />
                           </td>
                           <td className="font-mono text-slate-600">
@@ -352,6 +400,57 @@ function App() {
                             {formatDuration(row.durationSec)}
                           </td>
                           {/* <td>{row.amountRs}</td> */}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+              </>
+            )}
+
+            {/* Report View */}
+            {currentView === "report" && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-2xl font-bold text-slate-800">
+                    Usage Report
+                  </h2>
+                  <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                    {reportData.length} unique numbers
+                  </span>
+                </div>
+                <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
+                  <table className="custom-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Name</th>
+                        <th>Number</th>
+                        <th>Total Duration</th>
+                        <th>Calls Count</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.map((row, i) => (
+                        <tr key={i}>
+                          <td className="text-slate-500 font-medium">#{i + 1}</td>
+                          <td className="w-48">
+                            <EditableCell
+                              value={contacts[row.number] || ""}
+                              onSave={(newName) => handleContactSave(row.number, newName)}
+                            />
+                          </td>
+                          <td className="font-mono text-slate-600">
+                            {row.number}
+                          </td>
+                          <td className="font-medium text-blue-600 bg-blue-50/50">
+                            {formatDuration(row.totalDurationSec)}
+                          </td>
+                          <td className="text-center font-semibold bg-slate-50">
+                            {row.count}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
