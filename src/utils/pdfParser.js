@@ -24,6 +24,33 @@ export const formatTime = (timeStr) => {
 };
 
 /**
+ * Calculates and formats the end time given a start time and duration in seconds.
+ */
+export const getEndTime = (timeStr, durationSecStr) => {
+  if (!timeStr) return '';
+  const parts = timeStr.split(':');
+  let hours = parseInt(parts[0], 10);
+  let minutes = parseInt(parts[1], 10);
+  let seconds = parts.length > 2 ? parseInt(parts[2], 10) : 0;
+
+  const durationSec = parseInt(durationSecStr || "0", 10);
+  
+  const date = new Date();
+  date.setHours(hours, minutes, seconds + durationSec, 0);
+
+  let newHours = date.getHours();
+  const newMinutes = String(date.getMinutes()).padStart(2, '0');
+  const newSeconds = String(date.getSeconds()).padStart(2, '0');
+
+  const ampm = newHours >= 12 ? 'PM' : 'AM';
+  newHours = newHours % 12;
+  newHours = newHours ? newHours : 12; 
+  
+  const formattedSeconds = parts.length > 2 ? `:${newSeconds}` : '';
+  return `${newHours}:${newMinutes}${formattedSeconds} ${ampm}`;
+};
+
+/**
  * Formats duration in seconds to "Xh Ym Zs".
  */
 export const formatDuration = (seconds) => {

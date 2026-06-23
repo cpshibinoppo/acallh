@@ -8,7 +8,7 @@ import {
   BarChart3,
   List,
 } from "lucide-react";
-import { parsePdf, formatTime, formatDuration } from "./utils/pdfParser";
+import { parsePdf, formatTime, formatDuration, getEndTime } from "./utils/pdfParser";
 
 
 
@@ -372,7 +372,8 @@ function App() {
                       <tr>
                         <th>S.No.</th>
                         <th>Date</th>
-                        <th>Time</th>
+                        <th>Started</th>
+                        <th>Ended</th>
                         <th>Name</th>
                         <th>Number</th>
                         <th>Duration</th>
@@ -386,6 +387,9 @@ function App() {
                           <td>{row.date}</td>
                           <td className="font-medium text-airtel-red">
                             {formatTime(row.time)}
+                          </td>
+                          <td className="font-medium text-amber-600 bg-amber-50/30">
+                            {getEndTime(row.time, row.durationSec)}
                           </td>
                           <td className="w-48">
                             <EditableCell
