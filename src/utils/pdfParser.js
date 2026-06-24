@@ -70,17 +70,33 @@ export const formatDuration = (seconds) => {
   return parts.join(' ');
 };
 
-export const parsePdf = async (file) => {
+export const parsePdf = async (file, password) => {
   const arrayBuffer = await file.arrayBuffer();
-  
-  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-  const pdfDocument = await loadingTask.promise;
-  const numPages = pdfDocument.numPages;
+
+  let loadingTask;
+  try {
+    const getDocParams = password ? { data: arrayBuffer, password } : { data: arrayBuffer };
+    loadingTask = pdfjsLib.getDocument(getDocParams);
+    const pdfDocument = await loadingTask.promise;
+    var numPages = pdfDocument.numPages;
+  } catch (err) {
+    // Detect password-related errors from pdfjs and surface clear messages
+    const msg = err?.message || '';
+    const name = err?.name || '';
+    if (name === 'PasswordException' || /password/i.test(msg) || /encrypted/i.test(msg)) {
+      if (password) {
+        throw new Error('Incorrect password');
+      }
+      throw new Error('No password given');
+    }
+    throw err;
+  }
+  const numPagesLocal = numPages;
 
   let allLines = [];
 
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    const page = await pdfDocument.getPage(pageNum);
+  for (let pageNum = 1; pageNum <= numPagesLocal; pageNum++) {
+    const page = await loadingTask.promise.then(d => d.getPage(pageNum));
     const textContent = await page.getTextContent();
     
     // Group text items by Y coordinate (approximate lines)

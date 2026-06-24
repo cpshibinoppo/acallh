@@ -171,7 +171,34 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setError("Failed to parse the PDF. " + err.message);
+      // If the PDF is password protected, ask for the password and retry
+      const msg = err?.message || '';
+      if (/password|encrypted/i.test(msg)) {
+        const pw = window.prompt('This PDF appears to be password protected. Please enter the password:');
+        if (pw) {
+          try {
+            setIsLoading(true);
+            const parsedData2 = await parsePdf(selectedFile, pw);
+            setData(parsedData2);
+            if (parsedData2.recharge.length === 0 && parsedData2.voice.length === 0) {
+              setError(
+                "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
+              );
+            } else {
+              setError(null);
+            }
+          } catch (err2) {
+            console.error(err2);
+            setError("Failed to parse the PDF. " + err2.message);
+          } finally {
+            setIsLoading(false);
+          }
+        } else {
+          setError('Failed to parse the PDF. No password provided.');
+        }
+      } else {
+        setError("Failed to parse the PDF. " + err.message);
+      }
     } finally {
       setIsLoading(false);
     }
