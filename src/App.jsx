@@ -80,6 +80,65 @@ function App() {
   const [error, setError] = useState(null);
   const [currentView, setCurrentView] = useState("statements");
   const fileInputRef = useRef(null);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const fetchStatements = async (start, end) => {
+    let url = "/api/statements";
+    const params = [];
+    if (start) params.push(`startDate=${start}`);
+    if (end) params.push(`endDate=${end}`);
+    if (params.length > 0) url += `?${params.join("&")}`;
+
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const result = await res.json();
+        if (
+          result.voice.length > 0 ||
+          result.recharge.length > 0 ||
+          start ||
+          end
+        ) {
+          setData(result);
+        } else {
+          setData(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch statements:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatements(startDate, endDate);
+  }, [startDate, endDate]);
+
+  const uploadParsedData = async (parsedData) => {
+    if (parsedData.recharge.length === 0 && parsedData.voice.length === 0) {
+      setError(
+        "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/statements/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsedData),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to upload statements");
+      }
+      setError(null);
+      await fetchStatements(startDate, endDate);
+    } catch (err) {
+      console.error("Upload error:", err);
+      setError("Failed to save data to database. " + err.message);
+    }
+  };
 
   const reportData = useMemo(() => {
     if (!data?.voice) return [];
@@ -169,12 +228,7 @@ function App() {
 
     try {
       const parsedData = await parsePdf(selectedFile);
-      setData(parsedData);
-      if (parsedData.recharge.length === 0 && parsedData.voice.length === 0) {
-        setError(
-          "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
-        );
-      }
+      await uploadParsedData(parsedData);
     } catch (err) {
       console.error(err);
       // If the PDF is password protected, check default password or ask the user
@@ -182,17 +236,7 @@ function App() {
       if (/password|encrypted/i.test(msg)) {
         try {
           const parsedData2 = await parsePdf(selectedFile, "20065961");
-          setData(parsedData2);
-          if (
-            parsedData2.recharge.length === 0 &&
-            parsedData2.voice.length === 0
-          ) {
-            setError(
-              "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
-            );
-          } else {
-            setError(null);
-          }
+          await uploadParsedData(parsedData2);
         } catch (errDefault) {
           console.warn("Default password failed. Prompting user:", errDefault);
           const pw = window.prompt(
@@ -201,17 +245,7 @@ function App() {
           if (pw) {
             try {
               const parsedData3 = await parsePdf(selectedFile, pw);
-              setData(parsedData3);
-              if (
-                parsedData3.recharge.length === 0 &&
-                parsedData3.voice.length === 0
-              ) {
-                setError(
-                  "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
-                );
-              } else {
-                setError(null);
-              }
+              await uploadParsedData(parsedData3);
             } catch (err2) {
               console.error(err2);
               setError("Failed to parse the PDF. " + err2.message);
@@ -303,7 +337,7 @@ function App() {
         )}
 
         {/* Error Message */}
-        {error && (
+        {error && !data && (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3 text-red-700">
             <AlertCircle className="shrink-0 mt-0.5" />
             <div>
@@ -317,12 +351,21 @@ function App() {
         {data && !isLoading && (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3 text-green-600 bg-green-50 px-4 py-2 rounded-full border border-green-200">
-                <CheckCircle2 size={20} />
-                <span className="font-medium text-sm">
-                  Successfully parsed {file?.name}
-                </span>
-              </div>
+              {file ? (
+                <div className="flex items-center gap-3 text-green-600 bg-green-50 px-4 py-2 rounded-full border border-green-200">
+                  <CheckCircle2 size={20} />
+                  <span className="font-medium text-sm">
+                    Successfully parsed {file.name}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 text-slate-600 bg-slate-100 px-4 py-2 rounded-full border border-slate-200">
+                  <CheckCircle2 size={20} />
+                  <span className="font-medium text-sm">
+                    Loaded statements from database
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                 <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -353,6 +396,7 @@ function App() {
                   onClick={() => {
                     setData(null);
                     setFile(null);
+                    setError(null);
                     setCurrentView("statements");
                   }}
                   className="text-sm font-medium text-airtel-red hover:text-red-700 hover:underline transition-colors whitespace-nowrap"
@@ -362,9 +406,52 @@ function App() {
               </div>
             </div>
 
+            {/* Date Filters */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row items-end gap-4">
+              <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-airtel-red text-slate-700 bg-slate-50 font-medium w-full sm:w-48"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  End Date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-airtel-red text-slate-700 bg-slate-50 font-medium w-full sm:w-48"
+                />
+              </div>
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                  }}
+                  className="text-sm font-semibold text-slate-500 hover:text-airtel-red transition-colors px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 w-full sm:w-auto text-center cursor-pointer"
+                >
+                  Clear Filter
+                </button>
+              )}
+            </div>
+
             {/* Statements View */}
             {currentView === "statements" && (
               <>
+                {data.recharge.length === 0 && data.voice.length === 0 && (
+                  <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 font-medium">
+                    No statements found for the selected date range.
+                  </div>
+                )}
+
                 {/* Recharge Statement */}
                 {data.recharge.length > 0 && (
                   <div className="space-y-4">
@@ -477,45 +564,51 @@ function App() {
                     {reportData.length} unique numbers
                   </span>
                 </div>
-                <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>Rank</th>
-                        <th>Name</th>
-                        <th>Number</th>
-                        <th>Total Duration</th>
-                        <th>Calls Count</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reportData.map((row, i) => (
-                        <tr key={i}>
-                          <td className="text-slate-500 font-medium">
-                            #{i + 1}
-                          </td>
-                          <td className="w-48">
-                            <EditableCell
-                              value={contacts[row.number] || ""}
-                              onSave={(newName) =>
-                                handleContactSave(row.number, newName)
-                              }
-                            />
-                          </td>
-                          <td className="font-mono text-slate-600">
-                            {row.number}
-                          </td>
-                          <td className="font-medium text-blue-600 bg-blue-50/50">
-                            {formatDuration(row.totalDurationSec)}
-                          </td>
-                          <td className="text-center font-semibold bg-slate-50">
-                            {row.count}
-                          </td>
+                {reportData.length === 0 ? (
+                  <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center text-slate-500 font-medium">
+                    No call records found for the selected date range.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Name</th>
+                          <th>Number</th>
+                          <th>Total Duration</th>
+                          <th>Calls Count</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {reportData.map((row, i) => (
+                          <tr key={i}>
+                            <td className="text-slate-500 font-medium">
+                              #{i + 1}
+                            </td>
+                            <td className="w-48">
+                              <EditableCell
+                                value={contacts[row.number] || ""}
+                                onSave={(newName) =>
+                                  handleContactSave(row.number, newName)
+                                }
+                              />
+                            </td>
+                            <td className="font-mono text-slate-600">
+                              {row.number}
+                            </td>
+                            <td className="font-medium text-blue-600 bg-blue-50/50">
+                              {formatDuration(row.totalDurationSec)}
+                            </td>
+                            <td className="text-center font-semibold bg-slate-50">
+                              {row.count}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
