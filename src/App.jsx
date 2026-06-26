@@ -8,9 +8,12 @@ import {
   BarChart3,
   List,
 } from "lucide-react";
-import { parsePdf, formatTime, formatDuration, getEndTime } from "./utils/pdfParser";
-
-
+import {
+  parsePdf,
+  formatTime,
+  formatDuration,
+  getEndTime,
+} from "./utils/pdfParser";
 
 const EditableCell = ({ value, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -90,11 +93,14 @@ function App() {
         };
       }
       aggregation[row.number].count += 1;
-      aggregation[row.number].totalDurationSec += parseInt(row.durationSec || 0, 10);
+      aggregation[row.number].totalDurationSec += parseInt(
+        row.durationSec || 0,
+        10,
+      );
     });
 
     return Object.values(aggregation).sort(
-      (a, b) => b.totalDurationSec - a.totalDurationSec
+      (a, b) => b.totalDurationSec - a.totalDurationSec,
     );
   }, [data]);
 
@@ -110,13 +116,13 @@ function App() {
     if (newNumbers.length > 0) {
       const fetchNames = async () => {
         try {
-          const response = await fetch('/api/contacts/lookup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ numbers: newNumbers })
+          const response = await fetch("/api/contacts/lookup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ numbers: newNumbers }),
           });
           const result = await response.json();
-          
+
           if (result.contacts) {
             setContacts((prev) => ({ ...prev, ...result.contacts }));
           }
@@ -135,13 +141,13 @@ function App() {
       ...prev,
       [number]: newName,
     }));
-    
+
     // Save to database
     try {
-      await fetch('/api/contacts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number, name: newName })
+      await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number, name: newName }),
       });
     } catch (error) {
       console.error("Failed to save contact name:", error);
@@ -171,30 +177,48 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      // If the PDF is password protected, ask for the password and retry
-      const msg = err?.message || '';
+      // If the PDF is password protected, check default password or ask the user
+      const msg = err?.message || "";
       if (/password|encrypted/i.test(msg)) {
-        const pw = window.prompt('This PDF appears to be password protected. Please enter the password:');
-        if (pw) {
-          try {
-            setIsLoading(true);
-            const parsedData2 = await parsePdf(selectedFile, pw);
-            setData(parsedData2);
-            if (parsedData2.recharge.length === 0 && parsedData2.voice.length === 0) {
-              setError(
-                "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
-              );
-            } else {
-              setError(null);
-            }
-          } catch (err2) {
-            console.error(err2);
-            setError("Failed to parse the PDF. " + err2.message);
-          } finally {
-            setIsLoading(false);
+        try {
+          const parsedData2 = await parsePdf(selectedFile, "20065961");
+          setData(parsedData2);
+          if (
+            parsedData2.recharge.length === 0 &&
+            parsedData2.voice.length === 0
+          ) {
+            setError(
+              "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
+            );
+          } else {
+            setError(null);
           }
-        } else {
-          setError('Failed to parse the PDF. No password provided.');
+        } catch (errDefault) {
+          console.warn("Default password failed. Prompting user:", errDefault);
+          const pw = window.prompt(
+            "This PDF appears to be password protected. Please enter the password:",
+          );
+          if (pw) {
+            try {
+              const parsedData3 = await parsePdf(selectedFile, pw);
+              setData(parsedData3);
+              if (
+                parsedData3.recharge.length === 0 &&
+                parsedData3.voice.length === 0
+              ) {
+                setError(
+                  "No itemized statement data found in the PDF. Please make sure it is a valid Airtel bill.",
+                );
+              } else {
+                setError(null);
+              }
+            } catch (err2) {
+              console.error(err2);
+              setError("Failed to parse the PDF. " + err2.message);
+            }
+          } else {
+            setError("Failed to parse the PDF. No password provided.");
+          }
         }
       } else {
         setError("Failed to parse the PDF. " + err.message);
@@ -225,12 +249,11 @@ function App() {
             <FileType size={40} />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">
-            Airtel Bill Parser
+            Bill Parser
           </h1>
           <p className="text-lg text-slate-500 max-w-2xl mx-auto">
-            Upload your Airtel itemized statement PDF to automatically format
-            times to 12h (AM/PM) and durations to readable hours, minutes, and
-            seconds.
+            Upload your itemized statement PDF to automatically format times to
+            12h (AM/PM) and durations to readable hours, minutes, and seconds.
           </p>
         </header>
 
@@ -300,7 +323,7 @@ function App() {
                   Successfully parsed {file?.name}
                 </span>
               </div>
-              
+
               <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                 <div className="flex bg-slate-100 p-1 rounded-xl">
                   <button
@@ -344,100 +367,102 @@ function App() {
               <>
                 {/* Recharge Statement */}
                 {data.recharge.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-800">
-                    Recharge Statement
-                  </h2>
-                  <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                    {data.recharge.length} records
-                  </span>
-                </div>
-                <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>S.No.</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Amount(Rs)</th>
-                        <th>Channel</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.recharge.map((row, i) => (
-                        <tr key={i}>
-                          <td>{row.sNo}</td>
-                          <td>{row.date}</td>
-                          <td className="font-medium text-airtel-red">
-                            {formatTime(row.time)}
-                          </td>
-                          <td>{row.amountRs}</td>
-                          <td>{row.channel}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-2xl font-bold text-slate-800">
+                        Recharge Statement
+                      </h2>
+                      <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                        {data.recharge.length} records
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
+                      <table className="custom-table">
+                        <thead>
+                          <tr>
+                            <th>S.No.</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Amount(Rs)</th>
+                            <th>Channel</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.recharge.map((row, i) => (
+                            <tr key={i}>
+                              <td>{row.sNo}</td>
+                              <td>{row.date}</td>
+                              <td className="font-medium text-airtel-red">
+                                {formatTime(row.time)}
+                              </td>
+                              <td>{row.amountRs}</td>
+                              <td>{row.channel}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
-            {/* Voice Statement */}
-            {data.voice.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-800">
-                    Voice Statement
-                  </h2>
-                  <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                    {data.voice.length} records
-                  </span>
-                </div>
-                <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>S.No.</th>
-                        <th>Date</th>
-                        <th>Started</th>
-                        <th>Ended</th>
-                        <th>Name</th>
-                        <th>Number</th>
-                        <th>Duration</th>
-                        {/* <th>Amount(Rs)</th> */}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.voice.map((row, i) => (
-                        <tr key={i}>
-                          <td>{row.sNo}</td>
-                          <td>{row.date}</td>
-                          <td className="font-medium text-airtel-red">
-                            {formatTime(row.time)}
-                          </td>
-                          <td className="font-medium text-amber-600 bg-amber-50/30">
-                            {getEndTime(row.time, row.durationSec)}
-                          </td>
-                          <td className="w-48">
-                            <EditableCell
-                              value={contacts[row.number] || ""}
-                              onSave={(newName) => handleContactSave(row.number, newName)}
-                            />
-                          </td>
-                          <td className="font-mono text-slate-600">
-                            {row.number}
-                          </td>
-                          <td className="font-medium text-blue-600 bg-blue-50/50">
-                            {formatDuration(row.durationSec)}
-                          </td>
-                          {/* <td>{row.amountRs}</td> */}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+                {/* Voice Statement */}
+                {data.voice.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-2xl font-bold text-slate-800">
+                        Voice Statement
+                      </h2>
+                      <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                        {data.voice.length} records
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto rounded-xl shadow-sm border border-slate-200">
+                      <table className="custom-table">
+                        <thead>
+                          <tr>
+                            <th>S.No.</th>
+                            <th>Date</th>
+                            <th>Started</th>
+                            <th>Ended</th>
+                            <th>Name</th>
+                            <th>Number</th>
+                            <th>Duration</th>
+                            {/* <th>Amount(Rs)</th> */}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.voice.map((row, i) => (
+                            <tr key={i}>
+                              <td>{row.sNo}</td>
+                              <td>{row.date}</td>
+                              <td className="font-medium text-airtel-red">
+                                {formatTime(row.time)}
+                              </td>
+                              <td className="font-medium text-amber-600 bg-amber-50/30">
+                                {getEndTime(row.time, row.durationSec)}
+                              </td>
+                              <td className="w-48">
+                                <EditableCell
+                                  value={contacts[row.number] || ""}
+                                  onSave={(newName) =>
+                                    handleContactSave(row.number, newName)
+                                  }
+                                />
+                              </td>
+                              <td className="font-mono text-slate-600">
+                                {row.number}
+                              </td>
+                              <td className="font-medium text-blue-600 bg-blue-50/50">
+                                {formatDuration(row.durationSec)}
+                              </td>
+                              {/* <td>{row.amountRs}</td> */}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -466,11 +491,15 @@ function App() {
                     <tbody>
                       {reportData.map((row, i) => (
                         <tr key={i}>
-                          <td className="text-slate-500 font-medium">#{i + 1}</td>
+                          <td className="text-slate-500 font-medium">
+                            #{i + 1}
+                          </td>
                           <td className="w-48">
                             <EditableCell
                               value={contacts[row.number] || ""}
-                              onSave={(newName) => handleContactSave(row.number, newName)}
+                              onSave={(newName) =>
+                                handleContactSave(row.number, newName)
+                              }
                             />
                           </td>
                           <td className="font-mono text-slate-600">
